@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+
+# Django
+db.sqlite3
+*.log
+
+# Test/verification artifacts
+.playwright-mcp/
+chess-verify.png
+
+# Editors
+.vscode/
+.idea/

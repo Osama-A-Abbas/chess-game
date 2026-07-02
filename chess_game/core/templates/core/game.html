@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chess — Game</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #262421; color: #eee; display: flex; gap: 2rem; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
+        a { color: #8fbcff; }
+        #status { font-size: 1.1rem; margin-bottom: 0.8rem; min-height: 1.5rem; }
+        #status .check { color: #ff6b6b; font-weight: 600; }
+        #board { display: grid; grid-template-columns: repeat(8, 64px); grid-template-rows: repeat(8, 64px); border: 4px solid #111; user-select: none; }
+        .sq { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; font-size: 44px; cursor: pointer; position: relative; line-height: 1; }
+        .sq.light { background: #f0d9b5; }
+        .sq.dark { background: #b58863; }
+        .sq .coord { position: absolute; font-size: 10px; font-weight: 600; pointer-events: none; }
+        .sq .coord.file { right: 3px; bottom: 2px; }
+        .sq .coord.rank { left: 3px; top: 2px; }
+        .sq.light .coord { color: #b58863; }
+        .sq.dark .coord { color: #f0d9b5; }
+        .sq.selected { outline: 3px solid #f6f669; outline-offset: -3px; }
+        .sq.target::after { content: ""; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: rgba(20, 85, 30, 0.45); }
+        .sq.target.occupied::after { width: 56px; height: 56px; background: none; border: 5px solid rgba(20, 85, 30, 0.45); }
+        .piece.W { color: #fff; text-shadow: 0 0 2px #000, 0 1px 2px #000; }
+        .piece.B { color: #111; text-shadow: 0 0 1px #555; }
+        #side { width: 220px; }
+        #moves { list-style: none; padding: 0; font-family: monospace; font-size: 0.9rem; max-height: 480px; overflow-y: auto; color: #ccc; }
+        #moves li { padding: 2px 6px; }
+        #moves li:nth-child(odd) { background: #302e2b; }
+        #error { color: #ff6b6b; min-height: 1.2rem; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <div id="status">Loading…</div>
+        <div id="board"></div>
+        <div id="error"></div>
+    </div>
+    <div id="side">
+        <p><a href="{% url 'home' %}">← All games</a></p>
+        <h3>Moves</h3>
+        <ol id="moves"></ol>
+    </div>
+
+    <script>
+        const GAME_ID = "{{ game.id }}";
+        const GLYPHS = {
+            W: { K: "♚", Q: "♛", R: "♜", B: "♝", N: "♞", P: "♟" },
+            B: { K: "♚", Q: "♛", R: "♜", B: "♝", N: "♞", P: "♟" },
+        };
+
+        let state = null;
+        let selected = null;   // {file, rank}
+        let targets = [];      // [{file, rank}]
+
+        function getCookie(name) {
+            const m = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+            return m ? decodeURIComponent(m[2]) : "";
+        }
+
+        function pieceAt(file, rank) {
+            return state.pieces.find(p => p.file === file && p.rank === rank) || null;
+        }
+
+        function isTarget(file, rank) {
+            return targets.some(t => t.file === file && t.rank === rank);
+        }
+
+        function render() {
+            const board = document.getElementById("board");
+            board.innerHTML = "";
+            for (let rank = 7; rank >= 0; rank--) {
+                for (let file = 0; file < 8; file++) {
+                    const sq = document.createElement("div");
+                    sq.className = "sq " + ((file + rank) % 2 === 0 ? "dark" : "light");
+                    if (selected && selected.file === file && selected.rank === rank) sq.classList.add("selected");
+                    const piece = pieceAt(file, rank);
+                    if (isTarget(file, rank)) {
+                        sq.classList.add("target");
+                        if (piece) sq.classList.add("occupied");
+                    }
+                    if (piece) {
+                        const span = document.createElement("span");
+                        span.className = "piece " + piece.color;
+                        span.textContent = GLYPHS[piece.color][piece.type];
+                        sq.appendChild(span);
+                    }
+                    if (rank === 0) sq.insertAdjacentHTML("beforeend", `<span class="coord file">${"abcdefgh"[file]}</span>`);
+                    if (file === 0) sq.insertAdjacentHTML("beforeend", `<span class="coord rank">${rank + 1}</span>`);
+                    sq.addEventListener("click", () => onClick(file, rank));
+                    board.appendChild(sq);
+                }
+            }
+            renderStatus();
+            const list = document.getElementById("moves");
+            list.innerHTML = state.moves.map(m => `<li>${m}</li>`).join("");
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function renderStatus() {
+            const el = document.getElementById("status");
+            const name = c => (c === "W" ? "White" : "Black");
+            if (state.status === "M") {
+                el.innerHTML = `<span class="check">Checkmate!</span> ${name(state.winner)} wins.`;
+            } else if (state.status === "S") {
+                el.textContent = "Stalemate — draw.";
+            } else {
+                el.innerHTML = `${name(state.turn)} to move` + (state.in_check ? ` — <span class="check">check!</span>` : "");
+            }
+        }
+
+        function setError(msg) {
+            document.getElementById("error").textContent = msg || "";
+        }
+
+        async function onClick(file, rank) {
+            setError("");
+            if (state.status !== "A") return;
+
+            if (selected && isTarget(file, rank)) {
+                await makeMove(selected, { file, rank });
+                return;
+            }
+
+            const piece = pieceAt(file, rank);
+            if (piece && piece.color === state.turn) {
+                selected = { file, rank };
+                const res = await fetch(`/game/${GAME_ID}/legal/?file=${file}&rank=${rank}`);
+                targets = (await res.json()).moves;
+            } else {
+                selected = null;
+                targets = [];
+            }
+            render();
+        }
+
+        async function makeMove(from, to) {
+            const res = await fetch(`/game/${GAME_ID}/move/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+                body: JSON.stringify({ from, to }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setError(data.error || "Move failed.");
+            } else {
+                state = data;
+            }
+            selected = null;
+            targets = [];
+            render();
+        }
+
+        async function load() {
+            const res = await fetch(`/game/${GAME_ID}/state/`);
+            state = await res.json();
+            render();
+        }
+        load();
+    </script>
+</body>
+</html>

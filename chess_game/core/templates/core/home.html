@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chess</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; background: #262421; color: #eee; }
+        h1 { font-weight: 600; }
+        button { background: #629924; color: #fff; border: none; padding: 0.7rem 1.4rem; font-size: 1rem; border-radius: 6px; cursor: pointer; }
+        button:hover { background: #74b32c; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 0.4rem 0; }
+        a { color: #8fbcff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .status { color: #999; font-size: 0.85rem; margin-left: 0.5rem; }
+    </style>
+</head>
+<body>
+    <h1>♞ Chess</h1>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">New game</button>
+    </form>
+    <h2>Games</h2>
+    <ul>
+        {% for game in games %}
+        <li>
+            <a href="{% url 'game_page' game.id %}">Game {{ game.id|truncatechars:11 }}</a>
+            <span class="status">{{ game.get_status_display }}{% if game.winner %} — {{ game.get_winner_display }} wins{% endif %} · {{ game.created_at|date:"M j, H:i" }}</span>
+        </li>
+        {% empty %}
+        <li class="status">No games yet — start one!</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
