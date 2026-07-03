@@ -26,7 +26,10 @@ SECRET_KEY = 'django-insecure-dev-only-placeholder'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Dev default "*" lets other devices on your LAN connect (also gates
+# WebSocket origins via AllowedHostsOriginValidator). Set explicitly
+# in production, e.g. CHESS_ALLOWED_HOSTS=chess.example.com
+ALLOWED_HOSTS = [h for h in os.environ.get('CHESS_ALLOWED_HOSTS', '*').split(',') if h]
 
 
 # Application definition
