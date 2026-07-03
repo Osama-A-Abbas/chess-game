@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 from .piece import Color, GamePiece, PieceType
@@ -27,6 +28,25 @@ class Game(models.Model):
     status = models.CharField(max_length=1, choices=Status.choices, default=Status.ACTIVE)
     winner = models.CharField(max_length=1, choices=Color.choices, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Both null: a local hotseat game — anyone at the board moves both sides.
+    # white set, black null: an online game waiting for an opponent.
+    white_player = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="games_as_white",
+    )
+    black_player = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="games_as_black",
+    )
+
+    @property
+    def is_online(self):
+        return self.white_player_id is not None
+
+    @property
+    def joinable(self):
+        return self.is_online and self.black_player_id is None and self.status == self.Status.ACTIVE
 
     def __str__(self):
         return f"Game {self.id} ({self.get_status_display()})"

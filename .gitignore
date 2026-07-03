@@ -9,7 +9,7 @@ db.sqlite3
 
 # Test/verification artifacts
 .playwright-mcp/
-chess-verify.png
+chess-*.png
 
 # Editors
 .vscode/

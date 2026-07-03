@@ -32,13 +32,16 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # ASGI runserver — must come before staticfiles
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'core',
+    'live',
 ]
 
 MIDDLEWARE = [
@@ -69,6 +72,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'chess_game.wsgi.application'
+ASGI_APPLICATION = 'chess_game.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(
+                os.environ.get('CHESS_REDIS_HOST', '127.0.0.1'),
+                int(os.environ.get('CHESS_REDIS_PORT', '6380')),
+            )],
+        },
+    },
+}
+
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'home'
 
 
 # Database

@@ -1,0 +1,6 @@
+Django==6.0.6
+psycopg[binary]==3.3.4
+channels==4.3.2
+channels_redis==4.3.0
+redis==5.3.1  # redis-py >=8 breaks channels_redis' blocking reads (socket timeout kills idle consumers)
+daphne==4.2.2

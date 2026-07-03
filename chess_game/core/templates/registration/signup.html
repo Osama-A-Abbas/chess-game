@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chess — Sign up</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 360px; margin: 4rem auto; padding: 0 1rem; background: #262421; color: #eee; }
+        h1 { font-weight: 600; }
+        label { display: block; margin-top: 0.8rem; color: #bbb; font-size: 0.9rem; }
+        input { width: 100%; padding: 0.5rem; margin-top: 0.3rem; background: #1b1a17; color: #eee; border: 1px solid #444; border-radius: 4px; box-sizing: border-box; }
+        button { margin-top: 1.2rem; width: 100%; background: #629924; color: #fff; border: none; padding: 0.7rem; font-size: 1rem; border-radius: 6px; cursor: pointer; }
+        button:hover { background: #74b32c; }
+        a { color: #8fbcff; }
+        .errors { color: #ff6b6b; font-size: 0.85rem; }
+        ul.errorlist { margin: 0.2rem 0; padding-left: 1.1rem; }
+    </style>
+</head>
+<body>
+    <h1>♞ Sign up</h1>
+    <form method="post">
+        {% csrf_token %}
+        <div class="errors">{{ form.non_field_errors }}</div>
+        <label>Username {{ form.username.errors }} <input type="text" name="username" autofocus required maxlength="150"></label>
+        <label>Password <span class="errors">{{ form.password1.errors }}</span> <input type="password" name="password1" required></label>
+        <label>Confirm password <span class="errors">{{ form.password2.errors }}</span> <input type="password" name="password2" required></label>
+        <button type="submit">Create account</button>
+    </form>
+    <p>Have an account? <a href="{% url 'login' %}">Log in</a> · <a href="{% url 'home' %}">Home</a></p>
+</body>
+</html>

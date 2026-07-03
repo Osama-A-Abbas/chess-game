@@ -6,31 +6,129 @@
     <style>
         body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; background: #262421; color: #eee; }
         h1 { font-weight: 600; }
-        button { background: #629924; color: #fff; border: none; padding: 0.7rem 1.4rem; font-size: 1rem; border-radius: 6px; cursor: pointer; }
-        button:hover { background: #74b32c; }
+        h2 { font-size: 1.1rem; margin-top: 2rem; border-bottom: 1px solid #444; padding-bottom: 0.3rem; }
+        header { display: flex; justify-content: space-between; align-items: baseline; }
+        .userbox { font-size: 0.9rem; color: #bbb; }
+        button, .btn { background: #629924; color: #fff; border: none; padding: 0.7rem 1.4rem; font-size: 1rem; border-radius: 6px; cursor: pointer; }
+        button:hover, .btn:hover { background: #74b32c; }
+        button.alt { background: #3b6ea5; }
+        button.alt:hover { background: #4a83c0; }
+        button.small { padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+        button.danger { background: #a54040; }
+        .actions { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem; }
         ul { list-style: none; padding: 0; }
-        li { margin: 0.4rem 0; }
+        li { margin: 0.4rem 0; display: flex; align-items: center; gap: 0.5rem; }
         a { color: #8fbcff; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .status { color: #999; font-size: 0.85rem; margin-left: 0.5rem; }
+        .status { color: #999; font-size: 0.85rem; }
+        #waiting { display: none; margin-top: 1rem; padding: 0.8rem 1rem; background: #302e2b; border-radius: 6px; align-items: center; gap: 1rem; }
+        .pulse { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f6f669; animation: pulse 1s infinite alternate; }
+        @keyframes pulse { from { opacity: 0.3; } to { opacity: 1; } }
+        form { display: inline; }
     </style>
 </head>
 <body>
-    <h1>♞ Chess</h1>
-    <form method="post">
-        {% csrf_token %}
-        <button type="submit">New game</button>
-    </form>
-    <h2>Games</h2>
+    <header>
+        <h1>♞ Chess</h1>
+        <div class="userbox">
+            {% if user.is_authenticated %}
+                Playing as <strong>{{ user.username }}</strong> ·
+                <form method="post" action="{% url 'logout' %}">{% csrf_token %}<a href="#" onclick="this.parentNode.submit(); return false;">Log out</a></form>
+            {% else %}
+                <a href="{% url 'login' %}">Log in</a> · <a href="{% url 'signup' %}">Sign up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="actions">
+        <form method="post">{% csrf_token %}<input type="hidden" name="mode" value="local"><button type="submit">New local game</button></form>
+        {% if user.is_authenticated %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="mode" value="online"><button type="submit" class="alt">Create online game</button></form>
+        <button class="alt" id="find-btn" onclick="findMatch()">⚡ Find opponent</button>
+        {% else %}
+        <span class="status" style="align-self: center;">Log in to play online</span>
+        {% endif %}
+    </div>
+
+    <div id="waiting">
+        <span class="pulse"></span> Waiting for an opponent…
+        <button class="small danger" onclick="cancelMatch()">Cancel</button>
+    </div>
+
+    {% if open_challenges %}
+    <h2>Open challenges</h2>
     <ul>
-        {% for game in games %}
+        {% for game in open_challenges %}
+        <li>
+            <strong>{{ game.white_player.username }}</strong>
+            <span class="status">waiting since {{ game.created_at|date:"H:i" }}</span>
+            {% if user.is_authenticated %}
+            <form method="post" action="{% url 'game_join' game.id %}">{% csrf_token %}<button class="small" type="submit">Join as Black</button></form>
+            {% else %}
+            <a href="{% url 'game_page' game.id %}">watch</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if my_games %}
+    <h2>Your games</h2>
+    <ul>
+        {% for game in my_games %}
+        <li>
+            <a href="{% url 'game_page' game.id %}">{{ game.white_player.username|default:"?" }} vs {{ game.black_player.username|default:"(waiting)" }}</a>
+            <span class="status">{{ game.get_status_display }}{% if game.winner %} — {{ game.get_winner_display }} won{% endif %} · {{ game.created_at|date:"M j, H:i" }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>Local games</h2>
+    <ul>
+        {% for game in local_games %}
         <li>
             <a href="{% url 'game_page' game.id %}">Game {{ game.id|truncatechars:11 }}</a>
             <span class="status">{{ game.get_status_display }}{% if game.winner %} — {{ game.get_winner_display }} wins{% endif %} · {{ game.created_at|date:"M j, H:i" }}</span>
         </li>
         {% empty %}
-        <li class="status">No games yet — start one!</li>
+        <li class="status">No local games yet.</li>
         {% endfor %}
     </ul>
+
+    <script>
+        let matchSocket = null;
+
+        function getCookie(name) {
+            const m = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+            return m ? decodeURIComponent(m[2]) : "";
+        }
+
+        function findMatch() {
+            document.getElementById("find-btn").style.display = "none";
+            document.getElementById("waiting").style.display = "flex";
+            const proto = location.protocol === "https:" ? "wss" : "ws";
+            matchSocket = new WebSocket(`${proto}://${location.host}/ws/match/`);
+            matchSocket.onopen = async () => {
+                const res = await fetch("/match/find/", {
+                    method: "POST",
+                    headers: { "X-CSRFToken": getCookie("csrftoken") },
+                });
+                const data = await res.json();
+                if (data.matched) location.href = data.game_url;
+            };
+            matchSocket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.game_url) location.href = data.game_url;
+            };
+        }
+
+        async function cancelMatch() {
+            if (matchSocket) matchSocket.close();
+            await fetch("/match/cancel/", { method: "POST", headers: { "X-CSRFToken": getCookie("csrftoken") } });
+            document.getElementById("waiting").style.display = "none";
+            document.getElementById("find-btn").style.display = "";
+        }
+    </script>
 </body>
 </html>

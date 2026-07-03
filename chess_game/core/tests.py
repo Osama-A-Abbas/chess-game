@@ -1,7 +1,10 @@
 import json
 
-from django.test import TestCase
+from django.contrib.auth.models import User
+from django.test import Client, TestCase
 from django.urls import reverse
+
+from live.models import QueueEntry
 
 from . import rules
 from .models import Color, Game, PieceType
@@ -169,6 +172,95 @@ class MoveEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         pawn.refresh_from_db()
         self.assertEqual(pawn.piece_type, PieceType.QUEEN)
+
+
+class OnlineGameTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user("alice", password="pw")
+        self.bob = User.objects.create_user("bob", password="pw")
+        self.client.force_login(self.alice)
+        self.client.post(reverse("home"), {"mode": "online"})
+        self.game = Game.objects.get()
+
+    def bob_client(self, join=True):
+        client = Client()
+        client.force_login(self.bob)
+        if join:
+            client.post(reverse("game_join", args=[self.game.id]))
+            self.game.refresh_from_db()
+        return client
+
+    def test_creator_is_seated_as_white(self):
+        self.assertEqual(self.game.white_player, self.alice)
+        self.assertIsNone(self.game.black_player)
+        self.assertTrue(self.game.joinable)
+
+    def test_cannot_move_before_opponent_joins(self):
+        response = post_move(self.client, self.game, (4, 1), (4, 3))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Waiting for an opponent", response.json()["error"])
+
+    def test_creator_cannot_join_own_game(self):
+        self.client.post(reverse("game_join", args=[self.game.id]))
+        self.game.refresh_from_db()
+        self.assertIsNone(self.game.black_player)
+
+    def test_join_and_alternate_moves(self):
+        bob = self.bob_client()
+        self.assertEqual(self.game.black_player, self.bob)
+        self.assertEqual(post_move(self.client, self.game, (4, 1), (4, 3)).status_code, 200)
+        self.assertEqual(post_move(bob, self.game, (4, 6), (4, 4)).status_code, 200)
+
+    def test_cannot_move_opponents_pieces(self):
+        bob = self.bob_client()
+        response = post_move(bob, self.game, (4, 1), (4, 3))  # bob moving white
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_spectator_cannot_move(self):
+        self.bob_client()
+        response = post_move(Client(), self.game, (4, 1), (4, 3))
+        self.assertEqual(response.status_code, 403)
+
+    def test_second_joiner_is_rejected(self):
+        self.bob_client()
+        charlie = Client()
+        charlie.force_login(User.objects.create_user("charlie", password="pw"))
+        charlie.post(reverse("game_join", args=[self.game.id]))
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.black_player, self.bob)
+
+
+class MatchmakingTests(TestCase):
+    def setUp(self):
+        self.alice_client = Client()
+        self.alice_client.force_login(User.objects.create_user("alice", password="pw"))
+        self.bob_client = Client()
+        self.bob_client.force_login(User.objects.create_user("bob", password="pw"))
+
+    def test_first_caller_queues_second_gets_matched(self):
+        first = self.alice_client.post(reverse("find_match")).json()
+        self.assertEqual(first, {"queued": True})
+        second = self.bob_client.post(reverse("find_match")).json()
+        self.assertTrue(second["matched"])
+        game = Game.objects.get()
+        self.assertEqual(game.white_player.username, "alice")
+        self.assertEqual(game.black_player.username, "bob")
+        self.assertEqual(QueueEntry.objects.count(), 0)
+
+    def test_cancel_leaves_queue(self):
+        self.alice_client.post(reverse("find_match"))
+        self.alice_client.post(reverse("cancel_match"))
+        result = self.bob_client.post(reverse("find_match")).json()
+        self.assertEqual(result, {"queued": True})
+
+    def test_queueing_twice_is_idempotent(self):
+        self.alice_client.post(reverse("find_match"))
+        self.alice_client.post(reverse("find_match"))
+        self.assertEqual(QueueEntry.objects.count(), 1)
+
+    def test_anonymous_cannot_queue(self):
+        response = Client().post(reverse("find_match"))
+        self.assertEqual(response.status_code, 302)  # redirected to login
 
 
 class PageTests(TestCase):
