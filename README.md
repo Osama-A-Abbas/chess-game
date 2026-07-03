@@ -102,3 +102,7 @@ about Django, which keeps the chess logic independently testable.
 - Draw detection: threefold repetition, fifty-move rule, insufficient material
 - ELO ratings and rating-based matchmaking
 - Game clocks
+
+## Photos:
+<img width="1798" height="1272" alt="Screenshot From 2026-07-03 14-50-00" src="https://github.com/user-attachments/assets/f9414591-ae91-49f6-8d80-d9c4f1cbbe44" />
+
