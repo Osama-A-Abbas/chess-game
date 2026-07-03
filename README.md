@@ -106,3 +106,8 @@ about Django, which keeps the chess logic independently testable.
 ## Photos:
 <img width="1798" height="1272" alt="Screenshot From 2026-07-03 14-50-00" src="https://github.com/user-attachments/assets/f9414591-ae91-49f6-8d80-d9c4f1cbbe44" />
 
+<img width="1798" height="1272" alt="Screenshot From 2026-07-03 14-50-16" src="https://github.com/user-attachments/assets/37bd3348-55f6-4a1d-8284-5d95e6f683cf" />
+
+<img width="1798" height="1272" alt="Screenshot From 2026-07-03 14-51-33" src="https://github.com/user-attachments/assets/3cadd7e3-b5f6-4e0e-b439-24d17247756c" />
+
+<img width="1798" height="1272" alt="Screenshot From 2026-07-03 14-52-46" src="https://github.com/user-attachments/assets/2bcc2225-3360-4639-95b6-fd447bcfb48b" />
