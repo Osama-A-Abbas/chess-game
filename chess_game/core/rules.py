@@ -4,8 +4,12 @@ A board is a plain dict mapping (file, rank) tuples (both 0-7) to
 (piece_type, color) tuples, e.g. {(4, 0): ("K", "W")}. Views build it
 from GamePiece rows via Game.board() and hand it to these functions.
 
-Not implemented yet: castling, en passant, choice of promotion piece
-(pawns auto-promote to queen in the view layer).
+Castling: legal_moves() takes the game's castling rights (e.g. {"WK",
+"BQ"}) since "has this piece ever moved" is history, not position —
+the caller derives it from the move log (Game.castling_rights()).
+
+Not implemented yet: en passant, choice of promotion piece (pawns
+auto-promote to queen in the view layer).
 """
 
 WHITE, BLACK = "W", "B"
@@ -87,8 +91,9 @@ def is_in_check(board, color):
     )
 
 
-def legal_moves(board, src):
-    """Pseudo-moves minus any that leave the mover's own king in check."""
+def legal_moves(board, src, castling_rights=frozenset()):
+    """Pseudo-moves minus any that leave the mover's own king in check,
+    plus castling when the caller says the rights still exist."""
     piece_type, color = board[src]
     result = []
     for dst in pseudo_moves(board, src):
@@ -97,10 +102,51 @@ def legal_moves(board, src):
         next_board[dst] = (piece_type, color)
         if not is_in_check(next_board, color):
             result.append(dst)
+    if piece_type == KING:
+        result.extend(castling_moves(board, color, castling_rights))
     return result
 
 
+# (empty squares between king and rook, squares the king crosses) per side
+CASTLING_LANES = {
+    "K": ([5, 6], [5, 6]),      # kingside:  f and g files
+    "Q": ([1, 2, 3], [3, 2]),   # queenside: b, c, d empty; king crosses d, c
+}
+
+
+def castling_moves(board, color, castling_rights):
+    """Castle destinations for color's king. The king must not be in
+    check, and must not cross or land on an attacked square."""
+    rank = 0 if color == WHITE else 7
+    king_src = (4, rank)
+    if board.get(king_src) != (KING, color):
+        return []
+    moves = []
+    for side, (between, crossed) in CASTLING_LANES.items():
+        if color + side not in castling_rights:
+            continue
+        if any((file, rank) in board for file in between):
+            continue
+        if is_in_check(board, color):
+            continue
+        path_board = dict(board)
+        del path_board[king_src]
+        safe = True
+        for file in crossed:
+            path_board[(file, rank)] = (KING, color)
+            if is_in_check(path_board, color):
+                safe = False
+                break
+            del path_board[(file, rank)]
+        if safe:
+            moves.append((6 if side == "K" else 2, rank))
+    return moves
+
+
 def has_legal_move(board, color):
+    # Castling rights are irrelevant here: whenever castling is legal, the
+    # plain one-square king move onto the first crossed square is too, so
+    # castling can never be the *only* legal move.
     return any(
         legal_moves(board, sq)
         for sq, (_, c) in board.items()

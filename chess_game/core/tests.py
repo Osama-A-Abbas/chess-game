@@ -63,6 +63,63 @@ class RulesTests(TestCase):
         self.assertNotIn((5, 1), rules.legal_moves(board, (4, 0)))
 
 
+class CastlingTests(TestCase):
+    def bare_board(self, *extra):
+        board = {
+            (4, 0): (rules.KING, rules.WHITE),
+            (7, 0): (rules.ROOK, rules.WHITE),
+            (4, 7): (rules.KING, rules.BLACK),
+        }
+        board.update(extra)
+        return board
+
+    def test_kingside_castle_available_with_rights(self):
+        moves = rules.legal_moves(self.bare_board(), (4, 0), {"WK"})
+        self.assertIn((6, 0), moves)
+
+    def test_no_castle_without_rights(self):
+        moves = rules.legal_moves(self.bare_board(), (4, 0), set())
+        self.assertNotIn((6, 0), moves)
+
+    def test_no_castle_through_occupied_square(self):
+        board = self.bare_board(((5, 0), (rules.BISHOP, rules.WHITE)))
+        self.assertNotIn((6, 0), rules.legal_moves(board, (4, 0), {"WK"}))
+
+    def test_no_castle_while_in_check(self):
+        board = self.bare_board(((4, 6), (rules.ROOK, rules.BLACK)))
+        self.assertNotIn((6, 0), rules.legal_moves(board, (4, 0), {"WK"}))
+
+    def test_no_castle_through_attacked_square(self):
+        board = self.bare_board(((5, 6), (rules.ROOK, rules.BLACK)))  # black rook eyes f1
+        self.assertNotIn((6, 0), rules.legal_moves(board, (4, 0), {"WK"}))
+
+    def test_rights_lost_after_king_moves(self):
+        game = Game.create_with_pieces()
+        self.assertEqual(game.castling_rights(), {"WK", "WQ", "BK", "BQ"})
+        game.moves.create(
+            number=1, color=Color.WHITE, piece_type=PieceType.KING,
+            from_file=4, from_rank=0, to_file=4, to_rank=1,
+        )
+        self.assertEqual(game.castling_rights(), {"BK", "BQ"})
+
+    def test_full_castle_via_endpoint_moves_both_pieces(self):
+        game = Game.create_with_pieces()
+        post_move(self.client, game, (6, 0), (5, 2))  # Nf3
+        post_move(self.client, game, (0, 6), (0, 5))  # a6
+        post_move(self.client, game, (4, 1), (4, 2))  # e3
+        post_move(self.client, game, (1, 6), (1, 5))  # b6
+        post_move(self.client, game, (5, 0), (4, 1))  # Be2
+        post_move(self.client, game, (2, 6), (2, 5))  # c6
+        response = post_move(self.client, game, (4, 0), (6, 0))  # O-O
+        self.assertEqual(response.status_code, 200)
+        board = game.board()
+        self.assertEqual(board[(6, 0)], (PieceType.KING, Color.WHITE))
+        self.assertEqual(board[(5, 0)], (PieceType.ROOK, Color.WHITE))
+        self.assertNotIn((4, 0), board)
+        self.assertNotIn((7, 0), board)
+        self.assertTrue(game.moves.get(number=7).castled)
+
+
 class MoveEndpointTests(TestCase):
     def setUp(self):
         self.game = Game.create_with_pieces()

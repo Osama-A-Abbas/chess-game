@@ -59,7 +59,12 @@ def legal(request, game_id):
     if game.status != Game.Status.ACTIVE or src not in board or board[src][1] != game.turn:
         return JsonResponse({"moves": []})
     return JsonResponse(
-        {"moves": [{"file": f, "rank": r} for f, r in rules.legal_moves(board, src)]}
+        {
+            "moves": [
+                {"file": f, "rank": r}
+                for f, r in rules.legal_moves(board, src, game.castling_rights())
+            ]
+        }
     )
 
 
@@ -81,11 +86,18 @@ def move(request, game_id):
         return JsonResponse({"error": "No piece on that square."}, status=400)
     if board[src][1] != game.turn:
         return JsonResponse({"error": "It is not that color's turn."}, status=400)
-    if dst not in rules.legal_moves(board, src):
+    if dst not in rules.legal_moves(board, src, game.castling_rights()):
         return JsonResponse({"error": "Illegal move."}, status=400)
 
     piece = game.pieces.get(file=src[0], rank=src[1], is_captured=False)
     moved_type = piece.piece_type
+
+    castled = moved_type == PieceType.KING and abs(dst[0] - src[0]) == 2
+    if castled:
+        rook_from_file, rook_to_file = (7, 5) if dst[0] == 6 else (0, 3)
+        rook = game.pieces.get(file=rook_from_file, rank=src[1], is_captured=False)
+        rook.file = rook_to_file
+        rook.save()
 
     captured = game.pieces.filter(file=dst[0], rank=dst[1], is_captured=False).first()
     if captured:
@@ -109,6 +121,7 @@ def move(request, game_id):
         to_rank=dst[1],
         captured_type=captured.piece_type if captured else "",
         promoted=promoted,
+        castled=castled,
     )
 
     opponent = Color.BLACK if game.turn == Color.WHITE else Color.WHITE

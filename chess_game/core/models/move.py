@@ -14,6 +14,7 @@ class Move(models.Model):
     to_rank = models.PositiveSmallIntegerField()
     captured_type = models.CharField(max_length=1, choices=PieceType.choices, blank=True, default="")
     promoted = models.BooleanField(default=False)
+    castled = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["number"]

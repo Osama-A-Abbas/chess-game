@@ -51,3 +51,24 @@ class Game(models.Model):
             (p.file, p.rank): (p.piece_type, p.color)
             for p in self.pieces.filter(is_captured=False)
         }
+
+    def castling_rights(self):
+        """Rights like {"WK", "BQ"} (color + side), derived from history:
+        a right survives only if neither the king square nor that rook
+        square has ever been the origin or destination of a move."""
+        touched = set()
+        for frm_f, frm_r, to_f, to_r in self.moves.values_list(
+            "from_file", "from_rank", "to_file", "to_rank"
+        ):
+            touched.add((frm_f, frm_r))
+            touched.add((to_f, to_r))
+        board = self.board()
+        rights = set()
+        for color, rank in ((Color.WHITE, 0), (Color.BLACK, 7)):
+            if (4, rank) in touched or board.get((4, rank)) != (PieceType.KING, color):
+                continue
+            if (7, rank) not in touched and board.get((7, rank)) == (PieceType.ROOK, color):
+                rights.add(color + "K")
+            if (0, rank) not in touched and board.get((0, rank)) == (PieceType.ROOK, color):
+                rights.add(color + "Q")
+        return rights
